@@ -4,11 +4,9 @@ from sklearn.model_selection import train_test_split
 import logging
 import yaml
 
-
 # Ensure the "logs" directory exists
 log_dir = 'logs'
 os.makedirs(log_dir, exist_ok=True)
-
 
 # logging configuration
 logger = logging.getLogger('data_ingestion')
@@ -61,8 +59,21 @@ def load_data(data_url: str) -> pd.DataFrame:
 def preprocess_data(df: pd.DataFrame) -> pd.DataFrame:
     """Preprocess the data."""
     try:
-        df.drop(columns = ['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4'], inplace = True)
-        df.rename(columns = {'v1': 'target', 'v2': 'text'}, inplace = True)
+        # Check if columns exist before dropping them
+        columns_to_drop = ['Unnamed: 2', 'Unnamed: 3', 'Unnamed: 4']
+        existing_columns = [col for col in columns_to_drop if col in df.columns]
+        
+        if existing_columns:
+            df.drop(columns=existing_columns, inplace=True)
+            logger.debug('Dropped columns: %s', existing_columns)
+        
+        # Check if columns exist before renaming
+        if 'v1' in df.columns and 'v2' in df.columns:
+            df.rename(columns={'v1': 'target', 'v2': 'text'}, inplace=True)
+            logger.debug('Columns renamed: v1 -> target, v2 -> text')
+        else:
+            logger.warning('Expected columns v1 and v2 not found. Current columns: %s', df.columns.tolist())
+        
         logger.debug('Data preprocessing completed')
         return df
     except KeyError as e:
@@ -88,12 +99,19 @@ def main():
     try:
         params = load_params(params_path='params.yaml')
         test_size = params['data_ingestion']['test_size']
-        # test_size = 0.2
-        data_path = 'https://raw.githubusercontent.com/fahadsiddiqui337/Datasets/refs/heads/main/spam.csv'
-        df = load_data(data_url=data_path)
+        # Remove this line that was overriding the YAML parameter:
+        # test_size = 0.21
+        
+        data_url = 'https://raw.githubusercontent.com/fahadsiddiqui337/Datasets/refs/heads/main/spam.csv'
+        df = load_data(data_url=data_url)
         final_df = preprocess_data(df)
-        train_data, test_data = train_test_split(final_df, test_size=test_size, random_state=2)
+        train_data, test_data = train_test_split(final_df, test_size=test_size, random_state=42)
         save_data(train_data, test_data, data_path='./data')
+        
+        logger.info('Data ingestion completed successfully')
+        logger.info('Train data shape: %s', train_data.shape)
+        logger.info('Test data shape: %s', test_data.shape)
+        
     except Exception as e:
         logger.error('Failed to complete the data ingestion process: %s', e)
         print(f"Error: {e}")
